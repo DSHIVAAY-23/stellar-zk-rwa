@@ -18,22 +18,22 @@ Tokenized Real World Assets represent a trillion-dollar opportunity, but they fa
 1.  **Compliance requires Identity**: Issuers must verify "Is this user accredited?" or "Is this user in a sanctioned country?".
 2.  **Blockchain transparency leaks Privacy**: Traditional allow-lists require mapping on-chain addresses to real-world identities, creating a "doxxing" risk for high-net-worth individuals and institutions.
 
-## 💡 The Solution: Zero-Knowledge Compliance
+## 💡 The Solution: Optimistic Zero-Knowledge Compliance
 
-We solve this by decoupling **Verification** from **Settlement**:
+We solve this using an **Optimistic Gateway** pattern to minimize on-chain costs while preserving privacy:
 
-1.  **Off-Chain Compliance**: Users run a Rust-based compliance program (via SP1) on their local machine or a private server. This program checks their private documents.
-2.  **ZK Proof**: The program generates a cryptographic proof that asserts: *"I certify that I satisfy the compliance requirements for Asset X, and my public key is Y."*
-3.  **On-Chain Settlement**: The Soroban contract verifies this proof. If valid, it mints/transfers the RWA tokens to the user's public key.
+1.  **Off-Chain Compliance**: Users run a Rust-based compliance program (via SP1) to generate a ZK Proof found on their private data.
+2.  **Gateway Certification**: A trusted off-chain Gateway verifies this proof. If valid, it **signs** a certificate (Ed25519 signature) for the user.
+3.  **On-Chain Settlement**: The Soroban contract verifies the *Gateway's Signature*. This is extremely cheap (~450k gas) compared to verifying a ZK proof directly (>100M gas).
 
-**Result:** The blockchain knows *that* you are compliant, but not *why* (or *who* you are).
+**Result:** High-performance, low-cost privacy compliance on Stellar Mainnet.
 
 ## 🏗 Architecture
 
 Detailed flows can be found in [flow.md](./flow.md).
 
-- **`contracts/zk_verifier`**: A Soroban smart contract acting as the on-chain verifier.
-- **`sp1-prover`**: (In Progress) Rust-based SP1 guest program for generating proofs.
+- **`contracts/zk_verifier`**: Soroban contract that verifies Gateway signatures and mints tokens.
+- **`sp1-prover`**: Off-chain agent that acts as the Gateway (Proof Verification + Signing).
 
 ## 🚀 Quick Start
 
@@ -51,16 +51,17 @@ cd stellar-zk-rwa
 # Compile the contract
 make build
 
-# Run unit tests
+# Run unit tests (includes Gas Benchmark)
 make test
 ```
 
-## 🗺 Roadmap
+## map Roadmap
 
 - [x] **Project Scaffolding**: Workspace setup, Soroban configuration.
-- [ ] **SP1 Integration**: Implement off-chain proof generation for basic compliance check.
-- [ ] **On-Chain Verifier**: Implement Groth16/Plonk verifier in Soroban.
-- [ ] **End-to-End Demo**: CLI flow for generating a proof and submitting it to a local network.
+- [x] **Gas Benchmarking**: Confirmed native ZK costs are too high (>100M).
+- [x] **Architecture Refactor**: Switched to Optimistic Gateway pattern (<500k Gas).
+- [ ] **SP1 Integration**: Implement actual ZK circuit for compliance.
+- [ ] **End-to-End Demo**: CLI flow for keygen, signing, and mocking on-chain minting.
 - [ ] **Testnet Deployment**: Launch on Stellar Futurenet.
 
 ## 📄 License

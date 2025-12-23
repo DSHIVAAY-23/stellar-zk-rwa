@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "contracts/zk_verifier",
+    "contracts/zk_verifier", "sp1-prover/script",
 ]
 
 [profile.release]

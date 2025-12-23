@@ -6,57 +6,58 @@ The following sequence diagram illustrates the lifecycle of a private Real World
 
 ### Core Workflow
 
-1.  **Compliance Check (Off-Chain)**: The user provides private data (e.g., passport info, accreditation status) to the SP1 ZK Prover.
-2.  **Proof Generation**: The SP1 Prover runs the compliance logic inside a ZKVM and generates a ZK proof. No private data leaves this step; only the proof.
-3.  **On-Chain Verification**: The user submits the ZK Proof to the Soroban Contract.
-4.  **Asset Action**: If the proof is valid, the contract executes the privileged action (e.g., minting tokens) to the user's wallet.
+1.  **Compliance Check (Off-Chain)**: The user provides private data to the SP1 ZK Prover.
+2.  **Proof Generation**: The SP1 Prover generates a ZK proof asserting compliance.
+3.  **Gateway Certification**: A trusted off-chain "Gateway" verifies the ZK proof and **signs** the result with its private Ed25519 key.
+4.  **On-Chain Settlement**: The user submits the *Gateway's Signature* to the Soroban Contract. The contract verifies the signature (cheap) instead of the ZK proof (expensive).
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant User as 👤 User (Client)
-    participant Prover as ⚙️ SP1 ZK Prover (Off-Chain)
-    participant Contract as 📄 Soroban Contract (On-Chain)
-    participant Ledger as 📒 Stellar Ledger
+    participant Prover as ⚙️ SP1 Prover
+    participant Gateway as 🏛️ Gateway Authority
+    participant Contract as 📄 Soroban Contract
+    participant Ledger as 📒 Ledger
 
-    Note over User, Prover: Phase 1: Zero-Knowledge Proof Generation
-    User->>Prover: Submit Private Input (Identity/Assets)
-    Prover->>Prover: Execute Compliance Logic (ZKVM)
-    Prover->>Prover: Generate SP1 ZK Proof
-    Prover-->>User: Return Proof + Public Values
+    Note over User, Gateway: Phase 1: Off-Chain Privacy & Certification
+    User->>Prover: Submit Private Input
+    Prover->>Prover: Generate ZK Proof
+    Prover->>Gateway: Submit Proof for Signing
+    Gateway->>Gateway: Verify ZK Proof (Off-Chain)
+    Gateway-->>User: Return Signed Payload (Ed25519)
 
-    Note over User, Contract: Phase 2: On-Chain Verification & Settlement
-    User->>Contract: invoke verify_and_mint(Proof, PublicValues)
-    Contract->>Contract: Verify SP1 Proof (Groth16/Plonk)
+    Note over User, Contract: Phase 2: On-Chain Settlement
+    User->>Contract: verify_and_mint(Payload, Signature)
+    Contract->>Contract: Validate Gateway Signature
     
-    alt Proof is Valid
-        Contract->>Ledger: Mint RWA Tokens to User
+    alt Signature is Valid
+        Contract->>Ledger: Mint RWA Tokens
         Ledger-->>User: Update Balance
-    else Proof is Invalid
-        Contract-->>User: Revert Transaction
+    else Signature Invalid
+        Contract-->>User: Revert
     end
 ```
 
 ## Component Roles
 
 ### 1. User Client
-- Holds the private data.
-- Initiates the interaction.
-- Pays gas fees for the Soroban transaction.
+- Initiates the flow.
+- Holds private data.
 
-### 2. SP1 Prover (Off-Chain)
-- **Technology**: Succinct SP1 (Rust-based ZKVM).
-- **Role**: Proves that the user satisfies complex Rust-based compliance rules without revealing the input data.
-- **Output**: A small, verifiable proof.
+### 2. SP1 Prover & Gateway (Off-Chain)
+- **Prover**: Generates the heavy Zero-Knowledge Proof.
+- **Gateway**: Trusted entity that verifies the proof off-chain and signs the result.
+- **Why?**: Verifying a ZK proof on Stellar costs >100M CPU instructions. Checking a signature costs <0.5M. This "Optimistic" pattern enables privacy on mainnet today.
 
 ### 3. Soroban Contract (On-Chain)
-- **Technology**: Rust / Soroban SDK.
-- **Role**: Acts as the Verifier. It holds the "Verification Key" for the compliance program.
-- **Security**: Trustless. It relies entirely on the cryptographic validity of the submitted proof.
+- **Role**: Verifies the *Gateway's Signature*.
+- **Security**: Relies on the Gateway's honesty (Authorization/Authority model) rather than direct cryptographic verification of the proof on-chain.
 
 ## Key Data Structures
 
-### Proof Payload
-The `proof` submitted to the contract typically contains:
-- **Proof Bytes**: The cryptographic evidence.
-- **Public Inputs**: Data revealed to the chain (e.g., "User is accredited", "Country is US"), but *not* raw private data (like SSN).
+### Signed Payload
+The contract verifies a signature over:
+- `User Address`: Who is compliant?
+- `Token ID`: What asset are they allowed to mint?
+- `Expiry`: Timestamp to prevent replay attacks.
